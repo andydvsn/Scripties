@@ -1,6 +1,6 @@
 #!/bin/bash
 
-## mediawikiupdater.sh v1.00 (15th Feb 2018) by Andy Davison
+## mediawikiupdater.sh v1.01 (19th Feb 2018) by Andy Davison
 ##  Updates mediawiki automatically just using the URL of the new version.
 
 
@@ -8,7 +8,7 @@ PHPVER="php-7.0"
 
 
 if [[ $# == 0 ]]; then
-	echo "Usage $0: <URL>"
+	echo "Usage $0: <URL | backup>"
 	exit 1
 fi
 
@@ -17,7 +17,35 @@ if [[ ! -h ./wiki ]]; then
 	exit 1
 fi
 
+
 CURRENTVER=`readlink wiki`
+THEDATE=$(TZ=Europe/London date +%Y%m%d%H%M)
+
+
+
+backitup() {
+
+	echo -n "Beginning backup of $CURRENTVER..."
+	mkdir -p ../backups/$THEDATE-$CURRENTVER
+	mysqldump --host=$WIKIDBSRVR --user=$WIKIDBUSER --password=$WIKIDBPASS $WIKIDBNAME > ../backups/$THEDATE-$CURRENTVER/$WIKIDBNAME.sql
+	mysqldump --host=$WIKIDBSRVR --user=$WIKIDBUSER --password=$WIKIDBPASS $WIKIDBNAME --xml > ../backups/$THEDATE-$CURRENTVER/$WIKIDBNAME.xml
+	cp -R $CURRENTVER ../backups/$THEDATE-$CURRENTVER/
+	cp .htaccess ../backups/$THEDATE-$CURRENTVER/root_htaccess
+	echo -n " compressing..."
+	tar czf ../backups/$THEDATE-$CURRENTVER.tgz ../backups/$THEDATE-$CURRENTVER &>/dev/null
+	rm -rf ../backups/$THEDATE-$CURRENTVER
+	echo " done."
+
+}
+
+
+if [[ "$1" == "backup" ]]; then
+
+	backitup
+	exit 0
+
+fi
+
 UPDATINTGZ=${1##*/}
 UPDATINVER=${UPDATINTGZ%.tar*}
 UPDATINVSH=${UPDATINVER##*-}
@@ -33,7 +61,7 @@ WIKIDBSRVR=`cat $CURRENTVER/LocalSettings.php | grep wgDBserver | cut -d'"' -f 2
 WIKIDBNAME=`cat $CURRENTVER/LocalSettings.php | grep wgDBname | cut -d'"' -f 2`
 WIKIDBUSER=`cat $CURRENTVER/LocalSettings.php | grep wgDBuser | cut -d'"' -f 2`
 WIKIDBPASS=`cat $CURRENTVER/LocalSettings.php | grep wgDBpassword | cut -d'"' -f 2`
-BACKUPDATE=$(TZ=Europe/London date +%Y%m%d%H%M)
+
 
 if [ ! -d $UPDATINVER ]; then
 
@@ -41,16 +69,7 @@ if [ ! -d $UPDATINVER ]; then
 	echo "Upgrading from $CURRENTVER to $UPDATINVER."
 	echo
 
-	echo -n "Beginning backup of $CURRENTVER..."
-	mkdir -p ../backups/$BACKUPDATE-$CURRENTVER
-	mysqldump --host=$WIKIDBSRVR --user=$WIKIDBUSER --password=$WIKIDBPASS $WIKIDBNAME > ../backups/$BACKUPDATE-$CURRENTVER/$WIKIDBNAME.sql
-	mysqldump --host=$WIKIDBSRVR --user=$WIKIDBUSER --password=$WIKIDBPASS $WIKIDBNAME --xml > ../backups/$BACKUPDATE-$CURRENTVER/$WIKIDBNAME.xml
-	cp -R $CURRENTVER ../backups/$BACKUPDATE-$CURRENTVER/
-	cp .htaccess ../backups/$BACKUPDATE-$CURRENTVER/root_htaccess
-	echo " compressing..."
-	tar czf ../backups/$BACKUPDATE-$CURRENTVER.tgz ../backups/$BACKUPDATE-$CURRENTVER
-	rm -rf ../backups/$BACKUPDATE-$CURRENTVER
-	echo " done."
+	backitup
 
 	echo -n "Downloading $UPDATINTGZ..."
 	wget -q $1
